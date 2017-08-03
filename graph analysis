@@ -1,0 +1,250 @@
+./bin/spark-shell --packages graphframes:graphframes:0.3.0-spark2.0-s_2.11
+
+%scala
+val bikeStations = spark.read 
+.option("header","true")  
+.csv("/mnt/defg/bike-data/201508_station_data.csv")
+val tripData = spark.read  
+.option("header","true")  
+.csv("/mnt/defg/bike-data/201508_trip_data.csv")
+
+%python
+bikeStations = spark.read\  
+.option("header","true")\  
+.csv("/mnt/defg/bike-data/201508_station_data.csv")
+tripData = spark.read\ 
+.option("header","true")\  
+.csv("/mnt/defg/bike-data/201508_trip_data.csv")
+
+val stationVertices = bikeStations  
+.withColumnRenamed("name", "id")  
+.distinct()val tripEdges = tripData  
+.withColumnRenamed("Start Station", "src") 
+.withColumnRenamed("End Station", "dst")
+
+%python
+stationVertices = bikeStations\ 
+.withColumnRenamed("name", "id")\ 
+.distinct()tripEdges = tripData\  
+.withColumnRenamed("Start Station", "src")\
+.withColumnRenamed("End Station", "dst")
+
+%scala
+import org.graphframes.GraphFrameval 
+stationGraph = GraphFrame(stationVertices, tripEdges)
+tripEdges.cache()
+stationVertices.cache()
+
+%python
+from graphframes import GraphFrame
+stationGraph = GraphFrame(stationVertices, tripEdges)
+tripEdges.cache()
+stationVertices.cache()
+
+stationGraph.vertices.count
+stationGraph.edges.count
+tripData.count
+
+%scala
+import org.apache.spark.sql.functions.descstationGraph 
+.edges  
+.groupBy("src", "dst") 
+.count() 
+.orderBy(desc("count")) 
+.show(10)
+
+%python
+from pyspark.sql.functions import descstationGraph\ 
+.edges\ 
+.groupBy("src", "dst")\ 
+.count()\  
+.orderBy(desc("count"))\ 
+.show(10)
+
+%scala
+stationGraph 
+.edges 
+.where("src = 'Townsend at 7th' OR dst = 'Townsend at 7th'") 
+.groupBy("src", "dst") 
+.count() 
+.orderBy(desc("count")) 
+.show(10)
+
+%python
+stationGraph\ 
+.edges\ 
+.where("src = 'Townsend at 7th' OR dst = 'Townsend at 7th'")\ 
+.groupBy("src", "dst")\  
+.count()\ 
+.orderBy(desc("count"))\  
+.show(10)
+
+%scala
+val townAnd7thEdges = stationGraph 
+.edges  
+.where("src = 'Townsend at 7th' OR dst = 'Townsend at 7th'")
+val subgraph = GraphFrame(stationGraph.vertices, townAnd7thEdges)
+
+%python
+townAnd7thEdges = stationGraph\ 
+.edges\ 
+.where("src = 'Townsend at 7th' OR dst = 'Townsend at 7th'")
+subgraph = GraphFrame(stationGraph.vertices, townAnd7thEdges)
+
+%scala
+val ranks = stationGraph.pageRank 
+.resetProbability(0.15)
+.maxIter(10)  
+.run()ranks.vertices 
+.orderBy(desc("pagerank")) 
+.select("id", "pagerank")  
+.show(10)
+
+%python
+ranks = stationGraph.pageRank(resetProbability=0.15,
+maxIter=10)ranks.vertices\ 
+.orderBy(desc("pagerank"))\ 
+.select("id", "pagerank")\  
+.show(10)
+
+%scala
+val inDeg = stationGraph.inDegrees
+inDeg.orderBy(desc("inDegree")).show(5, false)
+
+val outDeg = stationGraph.
+outDegreesoutDeg.orderBy(desc("outDegree")).show(5, false)
+
+%python
+outDeg = stationGraph.outDegrees
+outDeg.orderBy(desc("outDegree")).show(5, False)
+
+%scala
+val degreeRatio = inDeg.join(outDeg, Seq("id")) 
+.selectExpr("id", "double(inDegree)
+/double(outDegree) as degreeRatio")degreeRatio
+.orderBy(desc("degreeRatio"))  
+.show(10, false)degreeRatio 
+.orderBy("degreeRatio") 
+.show(10, false)
+
+%python
+degreeRatio = inDeg.join(outDeg, "id")\ 
+.selectExpr("id", "double(inDegree)/
+double(outDegree) as degreeRatio")degreeRatio\ 
+.orderBy(desc("degreeRatio"))\ 
+.show(10, False)degreeRatio\ 
+.orderBy("degreeRatio")\  
+.show(10, False) 
+
+%scala
+val bfsResult = stationGraph.bfs 
+.fromExpr("id = 'Townsend at 7th'")  
+.toExpr("id = 'Redwood City Medical Center'") 
+.maxPathLength(4) 
+.run()
+
+%pythonbfsResult = stationGraph.bfs(
+fromExpr="id = 'Townsend at 7th'", 
+toExpr="id = 'Redwood City Medical Center'",
+maxPathLength=4)
+bfsResult.show(10) 
+
+%scala
+spark.sparkContext.setCheckpointDir("/tmp/checkpoints")
+%python
+spark.sparkContext.setCheckpointDir("/tmp/checkpoints")
+%scala
+cc = stationGraph.connectedComponents.run()
+%python
+cc = stationGraph.connectedComponents()
+
+%scala
+val scc = stationGraph  
+.stronglyConnectedComponents 
+.maxIter(3) 
+.run()
+
+%python
+scc = stationGraph.stronglyConnectedComponents(maxIter=3)
+
+scc.groupBy("component").count().show()
+
+%scala
+val motifs = stationGraph 
+.find("(a)-[ab]->(b);
+(b)-[bc]->(c); 
+(c)-[ca]->(a)")
+
+%python
+motifs = stationGraph\ 
+.find("(a)-[ab]->(b); (b)-[bc]->(c); 
+(c)-[ca]->(a)")
+
+%scala
+import org.apache.spark.sql.functions.exprmotifs
+// first simplify dates for comparisons
+.selectExpr
+(
+"*", 
+""" 
+cast(unix_timestamp(ab.`Start Date`, 'MM/dd/yyyy HH:mm') 
+as timestamp) as abStart 
+""", 
+"""  
+cast(unix_timestamp(bc.`Start Date`, 'MM/dd/yyyy HH:mm')  
+as timestamp) as bcStart  
+""", 
+""" 
+cast(unix_timestamp(ca.`Start Date`, 'MM/dd/yyyy HH:mm')  
+as timestamp) as caStart 
+""")
+// ensure the same bike 
+.where("ca.`Bike #` = bc.`Bike #`") 
+.where("ab.`Bike #` = bc.`Bike #`")
+// ensure different stations
+.where("a.id != b.id")  
+.where("b.id != c.id")
+// start times are correct  
+.where("abStart < bcStart")  
+.where("bcStart < caStart")
+// order them all  
+.orderBy(expr("cast(caStart as long) - cast(abStart as long)")) 
+.selectExpr("a.id", "b.id", "c.id",    "ab.`Start Date`", "ca.`End Date`")  
+.limit(1) 
+.show(false)
+%python
+motifs# first simplify dates for comparisons
+.selectExpr
+("*",
+""" 
+cast(unix_timestamp(ab.`Start Date`, 'MM/dd/yyyy HH:mm')  
+as timestamp) as abStart 
+""", 
+"""  
+cast(unix_timestamp(bc.`Start Date`, 'MM/dd/yyyy HH:mm')  
+as timestamp) as bcStart 
+""",  """ 
+cast(unix_timestamp(ca.`Start Date`, 'MM/dd/yyyy HH:mm')  
+as timestamp)
+as 
+caStart  
+"""
+)
+
+# ensure the same bike 
+.where("ca.`Bike #` = bc.`Bike #`") 
+.where("ab.`Bike #` = bc.`Bike #`")
+# ensure different stations 
+.where("a.id != b.id")  
+.where("b.id != c.id")
+# start times are correct  
+.where("abStart < bcStart")  
+.where("bcStart < caStart")
+# order them all  
+.orderBy(expr("cast(caStart as long) - cast(abStart as long)"))  
+.selectExpr("a.id", "b.id", "c.id", 
+"ab.`Start Date`", "ca.`End Date`") 
+.limit(1)  
+.show(False)
+
+
